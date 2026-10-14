@@ -6,6 +6,7 @@ import { CaseRunner } from '../components/game/CaseRunner'
 import { SolvedScreen } from '../components/game/SolvedScreen'
 import { getCase } from '../data/cases'
 import { getAchievement } from '../data/achievements'
+import { buildAttemptPayload, cloudEnabled, submitAttempt } from '../services/cloud/supabase'
 import { isCaseUnlocked, useActivePlayer, usePlayerStore } from '../stores/playerStore'
 import { useGameStore } from '../stores/gameStore'
 import { useUiStore } from '../stores/uiStore'
@@ -51,9 +52,25 @@ export function CasePage() {
   if (!player) return null
 
   function finish() {
+    const liveSession = useGameStore.getState().session
     const partial = buildResult(def!)
     if (!partial) { nav('/cases'); return }
-    const { newAchievements } = recordResult(partial, def!)
+
+    const { result, newAchievements } = recordResult(partial, def!)
+
+    if (cloudEnabled) {
+      const payload = buildAttemptPayload(player!, def!, result, liveSession)
+      void submitAttempt(payload).then((synced) => {
+        if (!synced) {
+          push({
+            kind: 'info',
+            title: 'Nilai menunggu sinkronisasi',
+            body: 'Hasil tetap tersimpan di perangkat dan akan dicoba dikirim lagi saat koneksi tersedia.',
+          })
+        }
+      })
+    }
+
     clearSession()
     newAchievements.forEach((a) => { const d = getAchievement(a); if (d) push({ kind: 'achievement', title: `Pencapaian: ${d.idn}`, ar: d.ar, body: d.desc }) })
     setFinished(true)
